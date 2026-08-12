@@ -60,14 +60,20 @@ public sealed class RawDiskReader : IDisposable
     }
 
     /// <summary>
-    /// Reads the whole device, invoking <paramref name="onBlock"/> with each block (buffer, count).
-    /// Returns the list of zero-filled bad regions encountered.
+    /// Reads the device, invoking <paramref name="onBlock"/> with each block (buffer, count).
+    /// Pass <paramref name="maxBytes"/> to stop after the leading N bytes instead of reading
+    /// to the end. Returns the list of zero-filled bad regions encountered.
     /// </summary>
     public IReadOnlyList<BadRegion> ReadAll(
         Action<byte[], int> onBlock,
         IProgress<DiskProgress>? progress = null,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default,
+        long? maxBytes = null)
     {
+        // How much we hand to the consumer. Reads themselves stay full-chunk (and therefore
+        // sector-aligned, which raw device reads require) — only the final block is shortened.
+        long limit = maxBytes is null ? Length : Math.Clamp(maxBytes.Value, 0, Length);
+
         var badRegions = new List<BadRegion>();
         var stopwatch = Stopwatch.StartNew();
         var reportTimer = Stopwatch.StartNew();
@@ -76,7 +82,7 @@ public sealed class RawDiskReader : IDisposable
         long processed = 0;
         long lastReportBytes = 0;
 
-        while (processed < Length)
+        while (processed < limit)
         {
             cancellation.ThrowIfCancellationRequested();
 
@@ -86,28 +92,30 @@ public sealed class RawDiskReader : IDisposable
             if (NativeMethods.ReadFile(_handle, buffer, (uint)toRead, out uint bytesRead, IntPtr.Zero)
                 && bytesRead > 0)
             {
-                onBlock(buffer, (int)bytesRead);
-                processed += bytesRead;
+                int deliver = (int)Math.Min(bytesRead, limit - processed);
+                onBlock(buffer, deliver);
+                processed += deliver;
             }
             else
             {
                 // Slow path: re-read this chunk one sector at a time, zero-filling failures.
                 ReadChunkWithRecovery(buffer, processed, toRead, badRegions);
-                onBlock(buffer, toRead);
-                processed += toRead;
+                int deliver = (int)Math.Min(toRead, limit - processed);
+                onBlock(buffer, deliver);
+                processed += deliver;
             }
 
             if (progress != null && reportTimer.ElapsedMilliseconds >= 250)
             {
                 double bps = (processed - lastReportBytes) / reportTimer.Elapsed.TotalSeconds;
-                progress.Report(new DiskProgress(processed, Length, bps, stopwatch.Elapsed));
+                progress.Report(new DiskProgress(processed, limit, bps, stopwatch.Elapsed));
                 lastReportBytes = processed;
                 reportTimer.Restart();
             }
         }
 
         progress?.Report(new DiskProgress(
-            processed, Length,
+            processed, limit,
             processed / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001),
             stopwatch.Elapsed));
 

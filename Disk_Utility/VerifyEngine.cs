@@ -103,12 +103,17 @@ public static class VerifyEngine
         }
     }
 
-    /// <summary>Computes the requested digests over a physical device.</summary>
+    /// <summary>
+    /// Computes the requested digests over a physical device. Pass <paramref name="maxBytes"/>
+    /// to hash only the leading N bytes — the restore path needs this to compare a disk
+    /// against an image smaller than the disk itself.
+    /// </summary>
     public static HashResult HashDevice(
         string devicePath,
         HashSelection hashes = HashSelection.All,
         IProgress<DiskProgress>? progress = null,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default,
+        long? maxBytes = null)
     {
         var stopwatch = Stopwatch.StartNew();
         (IncrementalHash? md5, IncrementalHash? sha1, IncrementalHash? sha256) = HashUtil.CreateSet(hashes);
@@ -128,7 +133,8 @@ public static class VerifyEngine
                     processed += count;
                 },
                 progress,
-                cancellation);
+                cancellation,
+                maxBytes);
 
             stopwatch.Stop();
 
