@@ -1,0 +1,93 @@
+<Window x:Class="DiskUtility.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Disk Utility" Height="660" Width="920"
+        Background="#1E1E1E" WindowStartupLocation="CenterScreen">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,12">
+            <TextBlock DockPanel.Dock="Left" Text="Physical Drives"
+                       Foreground="White" FontSize="20" FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right" x:Name="RefreshButton" Content="Refresh"
+                    Padding="14,6" Click="RefreshButton_Click" />
+        </DockPanel>
+
+        <!-- Drive list -->
+        <DataGrid Grid.Row="1" x:Name="DiskGrid"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  CanUserAddRows="False" SelectionMode="Single"
+                  Background="#252526" Foreground="#EEEEEE" RowBackground="#252526"
+                  BorderBrush="#3F3F46" BorderThickness="1">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSystemDisk}" Value="True">
+                            <Setter Property="Background" Value="#4A1E1E" />
+                            <Setter Property="ToolTip"
+                                    Value="System disk — write operations are blocked for safety." />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="#"        Binding="{Binding Index}"         Width="40" />
+                <DataGridTextColumn Header="Device"   Binding="{Binding DeviceId}"      Width="Auto" />
+                <DataGridTextColumn Header="Model"    Binding="{Binding Model}"         Width="*" />
+                <DataGridTextColumn Header="Capacity" Binding="{Binding SizeDisplay}"   Width="Auto" />
+                <DataGridTextColumn Header="Bus"      Binding="{Binding InterfaceType}" Width="Auto" />
+                <DataGridTextColumn Header="Type"     Binding="{Binding Media}"         Width="Auto" />
+                <DataGridTextColumn Header="System"   Binding="{Binding SystemFlag}"    Width="Auto" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Action buttons -->
+        <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,0">
+            <Button x:Name="CreateImageButton" Content="Create Image…"
+                    Padding="14,6" Margin="0,0,8,8" Click="CreateImageButton_Click" />
+            <Button x:Name="VerifyImageButton" Content="Verify vs Image…"
+                    Padding="14,6" Margin="0,0,8,8" Click="VerifyImageButton_Click" />
+            <Button x:Name="HashFileButton" Content="Hash File…"
+                    Padding="14,6" Margin="0,0,8,8" Click="HashFileButton_Click" />
+            <Button x:Name="RestoreButton" Content="Restore Image…"
+                    Padding="14,6" Margin="0,0,8,8" Click="RestoreButton_Click" />
+            <Button x:Name="WipeButton" Content="Wipe…" Foreground="#FF6B6B"
+                    Padding="14,6" Margin="0,0,8,8" Click="WipeButton_Click" />
+            <Button x:Name="CancelButton" Content="Cancel"
+                    Padding="14,6" Margin="0,0,8,8" IsEnabled="False" Click="CancelButton_Click" />
+        </WrapPanel>
+
+        <!-- Progress -->
+        <Grid Grid.Row="3" Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ProgressBar Grid.Column="0" x:Name="ProgressBarCtl"
+                         Minimum="0" Maximum="100" Height="22" />
+            <TextBlock Grid.Column="1" x:Name="ProgressText" Foreground="#CCCCCC"
+                       VerticalAlignment="Center" MinWidth="220" Margin="12,0,0,0" Text="" />
+        </Grid>
+
+        <!-- Results / log -->
+        <TextBox Grid.Row="4" x:Name="LogBox" Height="150" Margin="0,12,0,0"
+                 IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                 FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap"
+                 Background="#1B1B1B" Foreground="#DDDDDD" BorderBrush="#3F3F46" />
+
+        <!-- Status line -->
+        <TextBlock Grid.Row="5" x:Name="StatusText" Foreground="#AAAAAA"
+                   Margin="0,10,0,0" Text="Ready." />
+    </Grid>
+</Window>

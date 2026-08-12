@@ -1,0 +1,58 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Build and test results
+[Tt]est[Rr]esult*/
+*.VisualState.xml
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+*.nuget.props
+*.nuget.targets
+
+# ClickOnce / publish
+publish/
+*.publishsettings
+*_i.c
+*_p.c
+*.pdb
+*.cache
+*.tmp
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Disk images and dumps produced by this tool — never commit these
+*.img
+*.bin
+*.iso
+*.vhd
+*.vhdx
+*.raw
+*.dd
