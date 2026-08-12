@@ -22,6 +22,13 @@ internal static class NativeMethods
 
     public static readonly IntPtr INVALID_HANDLE_VALUE = new(-1);
 
+    // Win32 error codes the volume-locking path has to tell apart.
+    public const int ERROR_NO_MORE_FILES = 18;
+    public const int ERROR_NOT_READY = 21;
+    public const int ERROR_INSUFFICIENT_BUFFER = 122;
+    public const int ERROR_MORE_DATA = 234;
+    public const int ERROR_NO_MEDIA_IN_DRIVE = 1112;
+
     public const uint IOCTL_DISK_GET_LENGTH_INFO = 0x0007405C;
     public const uint IOCTL_DISK_GET_DRIVE_GEOMETRY = 0x00070000;
     public const uint IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS = 0x00560000;
