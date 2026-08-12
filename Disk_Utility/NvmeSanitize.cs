@@ -69,9 +69,10 @@ public sealed class NvmeSanitizeStatus
     public string Explain()
     {
         if (!IsNvme)
-            return Error is null
-                ? "This drive did not answer NVMe Identify Controller, so it is not an NVMe device."
-                : $"NVMe sanitize could not be queried: {Error}";
+            return "This drive did not answer NVMe Identify Controller, so it is not an NVMe device "
+                 + "— or its driver does not expose NVMe pass-through. For a SATA drive this is the "
+                 + "expected answer; see the ATA line instead."
+                 + (Error is null ? string.Empty : $" ({Error})");
 
         if (SanitizeInProgress)
             return $"A sanitize is already running on this drive ({Progress * 100:0.0}% complete). "
@@ -246,7 +247,9 @@ public static class NvmeSanitize
             // drive's default pass count for overwrite.
             SendAdminCommand(handle, OpcodeSanitize, nsid: 0,
                 cdw10: (uint)action, cdw11: 0, dataFromDeviceLength: 0,
-                timeoutSeconds: ShortTimeoutSeconds, what: "SANITIZE");
+                timeoutSeconds: ShortTimeoutSeconds, what: "SANITIZE",
+                hint: "Windows restricts which NVMe admin commands may be passed through, and some "
+                    + "drivers block Sanitize specifically even when Identify and log reads work.");
 
             bool finished = WaitForCompletion(handle, progress, out string? failure);
 
@@ -373,7 +376,7 @@ public static class NvmeSanitize
     /// </summary>
     private static byte[] SendAdminCommand(
         SafeFileHandle handle, byte opcode, uint nsid, uint cdw10, uint cdw11,
-        int dataFromDeviceLength, uint timeoutSeconds, string what)
+        int dataFromDeviceLength, uint timeoutSeconds, string what, string? hint = null)
     {
         int total = DataAt + dataFromDeviceLength;
         var input = new byte[total];
@@ -403,10 +406,12 @@ public static class NvmeSanitize
                 handle, NativeMethods.IOCTL_STORAGE_PROTOCOL_COMMAND,
                 input, (uint)total, output, (uint)total, out _, IntPtr.Zero))
         {
+            // A non-NVMe drive lands here too — its driver simply rejects an NVMe protocol command
+            // — so this message stays neutral about the cause and callers add their own reading.
             int err = Marshal.GetLastWin32Error();
             throw new IOException(
-                $"{what} could not be sent to the drive (Win32 error {err}). Windows restricts which "
-                + "NVMe admin commands may be passed through, and some drivers block them entirely.");
+                $"{what} was not accepted by the storage driver (Win32 error {err})."
+                + (hint is null ? string.Empty : $" {hint}"));
         }
 
         uint status = BitConverter.ToUInt32(output, ReturnStatus);
