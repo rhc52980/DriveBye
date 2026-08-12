@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -232,19 +233,38 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Read-only probe, so the dialog can say whether a firmware erase is actually possible on
+        // this drive instead of offering a method that will only fail at the last moment.
+        StatusText.Text = "Checking drive security support…";
+        AtaSecurityStatus ata = await Task.Run(() => AtaSecureErase.Query(disk.DeviceId));
+        StatusText.Text = "Ready.";
+
+        var options = new List<string> { "Zeros (1 pass)", "Random (1 pass)", "DoD 5220.22-M (3 passes)" };
+        int secureEraseIndex = -1;
+        bool useEnhanced = ata.EnhancedEraseSupported;
+
+        if (ata.CanEraseNow)
+        {
+            int minutes = useEnhanced ? ata.EnhancedEraseMinutes : ata.EraseMinutes;
+            string estimate = minutes > 0 ? $", ~{minutes} min" : string.Empty;
+            secureEraseIndex = options.Count;
+            options.Add($"ATA Secure Erase ({(useEnhanced ? "enhanced" : "normal")}{estimate})");
+        }
+
         string ssdNote = disk.Media == MediaKind.SSD
             ? "\n\nNOTE: This is an SSD. Overwrite passes do NOT reliably erase solid-state media "
-              + "because of wear-levelling. For guaranteed erasure use ATA Secure Erase / NVMe Sanitize "
-              + "(not yet implemented here). Proceed only if you understand this limitation."
+              + "because of wear-levelling. ATA Secure Erase hands the job to the drive's own "
+              + "firmware, which does reach relocated blocks."
             : string.Empty;
 
         var confirm = new ConfirmDialog(
             "Wipe drive — DESTRUCTIVE",
             $"This will PERMANENTLY ERASE all data on:\n\n"
             + $"    {disk.DeviceId}  —  {disk.Model}  ({disk.SizeDisplay})\n\n"
-            + "Every volume on the drive will be dismounted. This cannot be undone." + ssdNote,
+            + "Every volume on the drive will be dismounted. This cannot be undone." + ssdNote
+            + $"\n\n{ata.Explain()}",
             confirmPhrase: $"WIPE {disk.Index}",
-            options: new[] { "Zeros (1 pass)", "Random (1 pass)", "DoD 5220.22-M (3 passes)" },
+            options: options.ToArray(),
             verifyLabel: "Verify (zeros method only)",
             // On an SSD the warning above is not enough on its own — make the user state that
             // they've read it, and pass that answer to the engine instead of assuming it.
@@ -256,6 +276,12 @@ public partial class MainWindow : Window
             Owner = this,
         };
         if (confirm.ShowDialog() != true) return;
+
+        if (secureEraseIndex >= 0 && confirm.SelectedOptionIndex == secureEraseIndex)
+        {
+            await RunSecureEraseAsync(disk, useEnhanced);
+            return;
+        }
 
         WipeMethod method = confirm.SelectedOptionIndex switch
         {
@@ -295,6 +321,40 @@ public partial class MainWindow : Window
             else if (result.VerifyRequested)
                 LogLine($"  VERIFY: SKIPPED  read-back verification only applies to the Zeros "
                       + $"method; this run used {method}.");
+        }
+    }
+
+    /// <summary>
+    /// Hands the erase to the drive's firmware. There is no progress and no cancellation once
+    /// ERASE UNIT is issued — the command does not return until the drive is done — so the bar
+    /// runs indeterminate and the log says so before it starts.
+    /// </summary>
+    private async Task RunSecureEraseAsync(PhysicalDisk disk, bool enhanced)
+    {
+        var (_, token) = BeginOperation();
+        ProgressBarCtl.IsIndeterminate = true;
+
+        LogLine($"ATA Secure Erase on {disk.DeviceId} ({disk.Model}) — {(enhanced ? "enhanced" : "normal")} mode.");
+        LogLine("  The drive's firmware performs the erase. Once it starts it cannot be cancelled,");
+        LogLine("  reports no progress, and must not lose power until it finishes.");
+        LogLine($"  A temporary ATA password (\"{AtaSecureErase.Password}\") is set for the duration.");
+
+        SecureEraseResult result = await Task.Run(() => AtaSecureErase.Erase(disk, enhanced, token));
+
+        EndOperation();
+
+        if (result.Cancelled)
+            LogLine("Cancelled before the erase was issued. The drive was not touched.");
+        else if (result.Error is not null)
+            LogLine($"ERROR: {result.Error}");
+        else
+            LogLine($"Done. Drive reported a successful {(result.UsedEnhanced ? "enhanced" : "normal")} "
+                  + $"secure erase in {result.Elapsed:hh\\:mm\\:ss}, and cleared its password.");
+
+        if (result.PasswordLeftSet)
+        {
+            StatusText.Text = "DRIVE LEFT LOCKED — see the log before powering down.";
+            LogLine("  *** Do not power this drive down until it is unlocked. ***");
         }
     }
 
@@ -344,6 +404,7 @@ public partial class MainWindow : Window
         StatusText.Text = running ? "Working\u2026" : "Ready.";
         if (!running)
         {
+            ProgressBarCtl.IsIndeterminate = false;
             ProgressBarCtl.Value = 0;
             ProgressText.Text = string.Empty;
         }
