@@ -279,6 +279,11 @@ public partial class MainWindow : Window
                 LogLine("  VERIFY: PASS \u2713  the entire drive reads back as zero.");
             else if (result.FirstNonZeroOffset is long off)
                 LogLine($"  VERIFY: FAIL \u2717  first non-zero byte at offset {off:N0}.");
+            else if (result.UnverifiedRegionCount > 0)
+                LogLine($"  VERIFY: INCONCLUSIVE  no non-zero data was found, but "
+                      + $"{result.UnverifiedRegionCount} region(s) "
+                      + $"({PhysicalDisk.FormatBytes(result.UnverifiedBytes)}) could not be read "
+                      + "back and cannot be confirmed erased.");
         }
     }
 

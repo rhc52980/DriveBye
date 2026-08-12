@@ -7,8 +7,10 @@ namespace DiskUtility.Services;
 public static class DiskSafety
 {
     /// <summary>
-    /// Throws if the target is the system disk. Checks both the flag captured at enumeration
-    /// AND a fresh independent lookup, so a stale UI state can't slip a wipe past us.
+    /// Throws unless the target can be positively proven not to be the system disk. Re-runs the
+    /// lookup at write time so a stale UI snapshot can't slip a wipe past us, and refuses outright
+    /// when the system disk cannot be identified at all — an unproven target is treated as unsafe,
+    /// not as safe.
     /// </summary>
     public static void EnsureNotSystemDisk(PhysicalDisk disk)
     {
@@ -16,8 +18,15 @@ public static class DiskSafety
             throw new InvalidOperationException(
                 "Refusing to write to the system disk (the drive Windows is running from).");
 
-        int systemIndex = DriveEnumerator.GetSystemDiskIndex();
-        if (systemIndex >= 0 && disk.Index == systemIndex)
+        int? systemIndex = DriveEnumerator.GetSystemDiskIndex();
+
+        if (systemIndex is null)
+            throw new InvalidOperationException(
+                "Refusing to write: could not determine which physical disk hosts Windows, so this "
+                + "target cannot be proven safe. This can happen with Storage Spaces, dynamic disks, "
+                + "or some RAID configurations.");
+
+        if (disk.Index == systemIndex)
             throw new InvalidOperationException(
                 "Refusing to write to the system disk (verified at write time).");
     }
