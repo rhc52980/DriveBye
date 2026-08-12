@@ -156,6 +156,41 @@ public partial class MainWindow : Window
         if (r.Sha256 is not null) LogLine($"  SHA256 {r.Sha256}");
     }
 
+    // ---- Erase support: read-only capability probe ----
+
+    /// <summary>
+    /// Asks the selected drive what kind of firmware erase it supports. Both probes only issue
+    /// identify/log reads, so unlike the wipe path this is safe on any drive — the system disk
+    /// included, which is the only way to inspect it on a single-drive machine.
+    /// </summary>
+    private async void EraseSupportButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DiskGrid.SelectedItem is not PhysicalDisk disk)
+        {
+            StatusText.Text = "Select a drive first.";
+            return;
+        }
+
+        EraseSupportButton.IsEnabled = false;
+        StatusText.Text = "Querying drive…";
+
+        try
+        {
+            AtaSecurityStatus ata = await Task.Run(() => AtaSecureErase.Query(disk.DeviceId));
+            NvmeSanitizeStatus nvme = await Task.Run(() => NvmeSanitize.Query(disk.DeviceId));
+
+            LogLine($"Erase support for {disk.DeviceId} ({disk.Model}, {disk.SizeDisplay})"
+                  + (disk.IsSystemDisk ? "  [system disk — read-only query]" : string.Empty));
+            LogLine($"  ATA:  {ata.Explain()}");
+            LogLine($"  NVMe: {nvme.Explain()}");
+        }
+        finally
+        {
+            EraseSupportButton.IsEnabled = true;
+            StatusText.Text = "Ready.";
+        }
+    }
+
     // ---- Restore: write an image back to a disk ----
 
     private async void RestoreButton_Click(object sender, RoutedEventArgs e)
@@ -447,6 +482,7 @@ public partial class MainWindow : Window
         CreateImageButton.IsEnabled = !running;
         VerifyImageButton.IsEnabled = !running;
         HashFileButton.IsEnabled = !running;
+        EraseSupportButton.IsEnabled = !running;
         RestoreButton.IsEnabled = !running;
         WipeButton.IsEnabled = !running;
         RefreshButton.IsEnabled = !running;

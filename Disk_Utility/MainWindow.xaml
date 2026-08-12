@@ -60,6 +60,9 @@
                     Padding="14,6" Margin="0,0,8,8" Click="VerifyImageButton_Click" />
             <Button x:Name="HashFileButton" Content="Hash File…"
                     Padding="14,6" Margin="0,0,8,8" Click="HashFileButton_Click" />
+            <Button x:Name="EraseSupportButton" Content="Erase Support"
+                    Padding="14,6" Margin="0,0,8,8" Click="EraseSupportButton_Click"
+                    ToolTip="Read-only: asks the drive whether it supports ATA Secure Erase or NVMe Sanitize. Safe on any drive, including the system disk." />
             <Button x:Name="RestoreButton" Content="Restore Image…"
                     Padding="14,6" Margin="0,0,8,8" Click="RestoreButton_Click" />
             <Button x:Name="WipeButton" Content="Wipe…" Foreground="#FF6B6B"
