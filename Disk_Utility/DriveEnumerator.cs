@@ -84,7 +84,7 @@ public static class DriveEnumerator
     /// Resolves the physical drive index that hosts the running Windows installation
     /// by walking LogicalDisk -> Partition -> DiskDrive associations.
     /// </summary>
-    private static int GetSystemDiskIndex()
+    internal static int GetSystemDiskIndex()
     {
         try
         {
