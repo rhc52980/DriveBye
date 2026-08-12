@@ -17,6 +17,11 @@
         <CheckBox x:Name="VerifyCheck" Foreground="#CCCCCC" Margin="0,0,0,12"
                   Content="Verify after writing" />
 
+        <CheckBox x:Name="AckCheck" Foreground="#E0A0A0" Margin="0,0,0,12"
+                  Checked="Gate_Changed" Unchecked="Gate_Changed">
+            <TextBlock x:Name="AckText" TextWrapping="Wrap" MaxWidth="440" />
+        </CheckBox>
+
         <TextBlock x:Name="PhraseLabel" Foreground="#E0A0A0" TextWrapping="Wrap" Margin="0,0,0,6" />
         <TextBox x:Name="InputBox" FontFamily="Consolas" Padding="4"
                  Background="#2A2A2A" Foreground="#FFFFFF" BorderBrush="#5A5A5A"

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Threading;
 using DiskUtility.Models;
 
@@ -20,6 +21,12 @@ public sealed class WipeResult
     public int PassesRun { get; init; }
     public long BytesPerPass { get; init; }
     public TimeSpan Elapsed { get; init; }
+    /// <summary>
+    /// True when read-back verification was asked for — whether or not it actually ran. It only
+    /// runs for the zeros method, and a request that quietly did nothing must still be reported.
+    /// </summary>
+    public bool VerifyRequested { get; init; }
+
     public bool VerifiedZero { get; init; }
     public long? FirstNonZeroOffset { get; init; }
 
@@ -114,6 +121,7 @@ public static class WipeEngine
                 PassesRun = passesRun,
                 BytesPerPass = bytesPerPass,
                 Elapsed = stopwatch.Elapsed,
+                VerifyRequested = verifyZeros,
                 VerifiedZero = verified,
                 FirstNonZeroOffset = firstNonZero,
                 UnverifiedRegionCount = unverifiedRegions,
@@ -141,15 +149,16 @@ public static class WipeEngine
             return maxCount;
         };
 
-    private static ChunkProducer MakeRandomProducer()
-    {
-        var rng = new Random();
-        return (buffer, maxCount) =>
+    /// <summary>
+    /// Cryptographic RNG, not <see cref="Random"/>: a pass whose bytes are predictable from the
+    /// seed undercuts the point of a random overwrite, and of the DoD label on it.
+    /// </summary>
+    private static ChunkProducer MakeRandomProducer() =>
+        (buffer, maxCount) =>
         {
-            rng.NextBytes(buffer.AsSpan(0, maxCount));
+            RandomNumberGenerator.Fill(buffer.AsSpan(0, maxCount));
             return maxCount;
         };
-    }
 
     /// <summary>
     /// Reads the whole device back, returning the offset of the first non-zero byte (or null)

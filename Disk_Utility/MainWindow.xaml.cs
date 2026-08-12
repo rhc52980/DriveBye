@@ -245,7 +245,13 @@ public partial class MainWindow : Window
             + "Every volume on the drive will be dismounted. This cannot be undone." + ssdNote,
             confirmPhrase: $"WIPE {disk.Index}",
             options: new[] { "Zeros (1 pass)", "Random (1 pass)", "DoD 5220.22-M (3 passes)" },
-            verifyLabel: "Verify (zeros method only)")
+            verifyLabel: "Verify (zeros method only)",
+            // On an SSD the warning above is not enough on its own — make the user state that
+            // they've read it, and pass that answer to the engine instead of assuming it.
+            acknowledgeText: disk.Media == MediaKind.SSD
+                ? "I understand this is an SSD, and that overwrite passes do not guarantee erasure."
+                : null,
+            verifyOnlyForOptionIndex: 0)   // index of "Zeros (1 pass)"
         {
             Owner = this,
         };
@@ -262,8 +268,10 @@ public partial class MainWindow : Window
         var (progress, token) = BeginOperation();
         LogLine($"Wiping {disk.DeviceId} ({disk.Model}, {disk.SizeDisplay}) — method: {method}");
 
+        bool ssdAcknowledged = confirm.Acknowledged;
+
         WipeResult result = await Task.Run(() =>
-            WipeEngine.Wipe(disk, method, allowSsdOverwrite: true, verifyZeros: verify, progress, token));
+            WipeEngine.Wipe(disk, method, allowSsdOverwrite: ssdAcknowledged, verifyZeros: verify, progress, token));
 
         EndOperation();
 
@@ -284,6 +292,9 @@ public partial class MainWindow : Window
                       + $"{result.UnverifiedRegionCount} region(s) "
                       + $"({PhysicalDisk.FormatBytes(result.UnverifiedBytes)}) could not be read "
                       + "back and cannot be confirmed erased.");
+            else if (result.VerifyRequested)
+                LogLine($"  VERIFY: SKIPPED  read-back verification only applies to the Zeros "
+                      + $"method; this run used {method}.");
         }
     }
 
