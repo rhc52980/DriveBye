@@ -7,7 +7,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyName>DiskUtility</AssemblyName>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <AssemblyName>DriveBye</AssemblyName>
+    <Product>DriveBye</Product>
+    <AssemblyTitle>DriveBye</AssemblyTitle>
+    <!-- Namespaces stay DiskUtility: renaming them touches every file without changing
+         anything a user sees. -->
     <RootNamespace>DiskUtility</RootNamespace>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -15,6 +20,17 @@
   <ItemGroup>
     <!-- WMI access for drive enumeration (separate NuGet package on modern .NET) -->
     <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- app.ico is also embedded as a resource so Window.Icon and the header tile can pick the
+         right frame per size; ApplicationIcon alone only sets the icon on the .exe itself.
+         drive_logo.png is the source art and is deliberately NOT embedded — it is 5 MB, and
+         every size the app actually draws is already in the .ico. -->
+    <Resource Include="app.ico" />
+    <!-- 512px square of the same crop. WPF hands out Frames[0] of an .ico — the 16x16 entry — so
+         the header tile needs its own asset or it draws a 16px image blown up to 44. -->
+    <Resource Include="logo.png" />
   </ItemGroup>
 
 </Project>
