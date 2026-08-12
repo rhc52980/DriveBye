@@ -42,8 +42,10 @@ public partial class ConfirmDialog : Window
         int? verifyOnlyForOptionIndex = null)
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => Services.WindowTheme.ApplyDarkTitleBar(this);
 
         Title = title;
+        HeaderText.Text = title;
         MessageText.Text = message;
         _confirmPhrase = confirmPhrase;
         _verifyOnlyForOptionIndex = verifyOnlyForOptionIndex;
