@@ -30,6 +30,12 @@ internal static class NativeMethods
     public const int ERROR_NO_MEDIA_IN_DRIVE = 1112;
 
     public const uint IOCTL_ATA_PASS_THROUGH_DIRECT = 0x0004D030;
+
+    /// <summary>
+    /// CTL_CODE(IOCTL_STORAGE_BASE=0x2d, 0x04F0, METHOD_BUFFERED, FILE_READ_ACCESS|FILE_WRITE_ACCESS).
+    /// Carries an NVMe command through to the drive.
+    /// </summary>
+    public const uint IOCTL_STORAGE_PROTOCOL_COMMAND = 0x002DD3C0;
     public const uint IOCTL_DISK_GET_LENGTH_INFO = 0x0007405C;
     public const uint IOCTL_DISK_GET_DRIVE_GEOMETRY = 0x00070000;
     public const uint IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS = 0x00560000;
@@ -153,6 +159,16 @@ internal static class NativeMethods
         SafeFileHandle hDevice, uint dwIoControlCode,
         ref ATA_PASS_THROUGH_DIRECT lpInBuffer, uint nInBufferSize,
         ref ATA_PASS_THROUGH_DIRECT lpOutBuffer, uint nOutBufferSize,
+        out uint lpBytesReturned, IntPtr lpOverlapped);
+
+    // Byte-buffer form: STORAGE_PROTOCOL_COMMAND, whose trailing command and data areas make it
+    // variable-length, so it is laid out by hand rather than marshalled as a struct.
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DeviceIoControl(
+        SafeFileHandle hDevice, uint dwIoControlCode,
+        byte[] lpInBuffer, uint nInBufferSize,
+        byte[] lpOutBuffer, uint nOutBufferSize,
         out uint lpBytesReturned, IntPtr lpOverlapped);
 
     // General form: raw pointer buffers (volume extents) or no buffers (lock/dismount).

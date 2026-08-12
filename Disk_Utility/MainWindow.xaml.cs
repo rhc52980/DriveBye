@@ -233,15 +233,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Read-only probe, so the dialog can say whether a firmware erase is actually possible on
-        // this drive instead of offering a method that will only fail at the last moment.
-        StatusText.Text = "Checking drive security support…";
+        // Read-only probes, so the dialog can say whether a firmware erase is actually possible on
+        // this drive instead of offering a method that will only fail at the last moment. A drive is
+        // one or the other, so whichever answers is the one worth reporting.
+        StatusText.Text = "Checking drive erase support…";
         AtaSecurityStatus ata = await Task.Run(() => AtaSecureErase.Query(disk.DeviceId));
+        NvmeSanitizeStatus nvme = await Task.Run(() => NvmeSanitize.Query(disk.DeviceId));
         StatusText.Text = "Ready.";
 
         var options = new List<string> { "Zeros (1 pass)", "Random (1 pass)", "DoD 5220.22-M (3 passes)" };
         int secureEraseIndex = -1;
+        int sanitizeIndex = -1;
         bool useEnhanced = ata.EnhancedEraseSupported;
+        SanitizeAction sanitizeAction = nvme.PreferredAction ?? SanitizeAction.CryptoErase;
 
         if (ata.CanEraseNow)
         {
@@ -251,10 +255,16 @@ public partial class MainWindow : Window
             options.Add($"ATA Secure Erase ({(useEnhanced ? "enhanced" : "normal")}{estimate})");
         }
 
+        if (nvme.CanSanitizeNow)
+        {
+            sanitizeIndex = options.Count;
+            options.Add($"NVMe Sanitize ({NvmeSanitizeStatus.Describe(sanitizeAction)})");
+        }
+
         string ssdNote = disk.Media == MediaKind.SSD
             ? "\n\nNOTE: This is an SSD. Overwrite passes do NOT reliably erase solid-state media "
-              + "because of wear-levelling. ATA Secure Erase hands the job to the drive's own "
-              + "firmware, which does reach relocated blocks."
+              + "because of wear-levelling. A firmware erase — ATA Secure Erase or NVMe Sanitize — "
+              + "hands the job to the drive itself, which does reach relocated blocks."
             : string.Empty;
 
         var confirm = new ConfirmDialog(
@@ -262,7 +272,7 @@ public partial class MainWindow : Window
             $"This will PERMANENTLY ERASE all data on:\n\n"
             + $"    {disk.DeviceId}  —  {disk.Model}  ({disk.SizeDisplay})\n\n"
             + "Every volume on the drive will be dismounted. This cannot be undone." + ssdNote
-            + $"\n\n{ata.Explain()}",
+            + $"\n\n{(nvme.IsNvme ? nvme.Explain() : ata.Explain())}",
             confirmPhrase: $"WIPE {disk.Index}",
             options: options.ToArray(),
             verifyLabel: "Verify (zeros method only)",
@@ -280,6 +290,12 @@ public partial class MainWindow : Window
         if (secureEraseIndex >= 0 && confirm.SelectedOptionIndex == secureEraseIndex)
         {
             await RunSecureEraseAsync(disk, useEnhanced);
+            return;
+        }
+
+        if (sanitizeIndex >= 0 && confirm.SelectedOptionIndex == sanitizeIndex)
+        {
+            await RunSanitizeAsync(disk, sanitizeAction);
             return;
         }
 
@@ -356,6 +372,41 @@ public partial class MainWindow : Window
             StatusText.Text = "DRIVE LEFT LOCKED — see the log before powering down.";
             LogLine("  *** Do not power this drive down until it is unlocked. ***");
         }
+    }
+
+    /// <summary>
+    /// Hands the erase to an NVMe drive's firmware. The drive works in the background and reports
+    /// real progress, but the command cannot be recalled once accepted — it outlives even a reboot.
+    /// </summary>
+    private async Task RunSanitizeAsync(PhysicalDisk disk, SanitizeAction action)
+    {
+        var (_, token) = BeginOperation();
+
+        string what = NvmeSanitizeStatus.Describe(action);
+        LogLine($"NVMe Sanitize on {disk.DeviceId} ({disk.Model}) — {what}.");
+        LogLine("  The drive's firmware performs the erase. Once accepted it cannot be cancelled,");
+        LogLine("  and it continues across a reboot until the drive reports it finished.");
+
+        var percent = new Progress<double>(p =>
+        {
+            ProgressBarCtl.Value = p * 100.0;
+            ProgressText.Text = $"{p * 100:0.0}%  •  sanitizing";
+        });
+
+        SanitizeResult result = await Task.Run(() => NvmeSanitize.Run(disk, action, percent, token));
+
+        EndOperation();
+
+        if (result.Cancelled)
+            LogLine("Cancelled before the command was issued. The drive was not touched.");
+        else if (result.Error is not null)
+            LogLine($"ERROR: {result.Error}");
+        else if (result.StillRunning)
+            LogLine("The drive accepted the sanitize and is still working. It will continue on its own; "
+                  + "re-open this dialog to see its progress.");
+        else
+            LogLine($"Done. Drive reported a successful {NvmeSanitizeStatus.Describe(result.Action)} "
+                  + $"in {result.Elapsed:hh\\:mm\\:ss}.");
     }
 
     // ---- Shared operation plumbing ----
