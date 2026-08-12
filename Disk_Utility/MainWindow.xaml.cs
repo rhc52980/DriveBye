@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => WindowTheme.ApplyDarkTitleBar(this);
         Loaded += async (_, _) => await LoadDrivesAsync();
     }
 
