@@ -14,7 +14,7 @@ public static class DriveEnumerator
 {
     public static IReadOnlyList<PhysicalDisk> Enumerate()
     {
-        int systemDiskIndex = GetSystemDiskIndex();
+        int? systemDiskIndex = GetSystemDiskIndex();
         Dictionary<int, MediaKind> mediaByIndex = GetMediaTypes();
 
         var disks = new List<PhysicalDisk>();
@@ -35,7 +35,7 @@ public static class DriveEnumerator
                 SizeBytes = ToLong(mo["Size"]),
                 InterfaceType = (mo["InterfaceType"] as string)?.Trim() ?? "Unknown",
                 Media = mediaByIndex.TryGetValue(index, out MediaKind m) ? m : MediaKind.Unknown,
-                IsSystemDisk = index >= 0 && index == systemDiskIndex,
+                IsSystemDisk = systemDiskIndex is int sys && index == sys,
             });
         }
 
@@ -83,15 +83,19 @@ public static class DriveEnumerator
     /// <summary>
     /// Resolves the physical drive index that hosts the running Windows installation
     /// by walking LogicalDisk -> Partition -> DiskDrive associations.
+    /// Returns null when the answer cannot be determined — which callers guarding a
+    /// destructive write MUST treat as "unsafe", never as "not the system disk".
+    /// The association walk legitimately comes back empty on Storage Spaces, dynamic
+    /// disks, and some RAID configurations.
     /// </summary>
-    internal static int GetSystemDiskIndex()
+    internal static int? GetSystemDiskIndex()
     {
         try
         {
             string windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             string? root = Path.GetPathRoot(windowsDir);   // "C:\"
             if (string.IsNullOrEmpty(root))
-                return -1;
+                return null;
 
             string sysDrive = root.TrimEnd('\\');          // "C:"
 
@@ -113,9 +117,9 @@ public static class DriveEnumerator
         }
         catch
         {
-            // If we cannot determine it, callers should treat "unknown" conservatively.
+            // Fall through to null — "unknown", which callers must treat conservatively.
         }
-        return -1;
+        return null;
     }
 
     // ---- WMI value coercion helpers ----

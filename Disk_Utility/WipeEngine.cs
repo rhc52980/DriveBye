@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using DiskUtility.Models;
@@ -21,6 +22,15 @@ public sealed class WipeResult
     public TimeSpan Elapsed { get; init; }
     public bool VerifiedZero { get; init; }
     public long? FirstNonZeroOffset { get; init; }
+
+    /// <summary>
+    /// Regions that could not be read back during verification. The reader zero-fills
+    /// unreadable sectors, so these are indistinguishable from genuinely erased ones and
+    /// prove nothing — a wipe with any of these is inconclusive, not verified.
+    /// </summary>
+    public int UnverifiedRegionCount { get; init; }
+    public long UnverifiedBytes { get; init; }
+
     public string? Error { get; init; }
 }
 
@@ -83,10 +93,18 @@ public static class WipeEngine
             // Optional verification only makes sense when the final pass wrote zeros.
             bool verified = false;
             long? firstNonZero = null;
+            int unverifiedRegions = 0;
+            long unverifiedBytes = 0;
+
             if (verifyZeros && method == WipeMethod.Zeros)
             {
-                firstNonZero = FindFirstNonZero(disk.DeviceId, progress, cancellation);
-                verified = firstNonZero is null;
+                (firstNonZero, unverifiedRegions, unverifiedBytes) =
+                    ScanForNonZero(disk.DeviceId, progress, cancellation);
+
+                // A sector we could not read back was zero-filled by the reader, so it looks
+                // exactly like a successfully erased one. Only claim verification when every
+                // byte was actually read AND was zero.
+                verified = firstNonZero is null && unverifiedRegions == 0;
             }
 
             stopwatch.Stop();
@@ -98,6 +116,8 @@ public static class WipeEngine
                 Elapsed = stopwatch.Elapsed,
                 VerifiedZero = verified,
                 FirstNonZeroOffset = firstNonZero,
+                UnverifiedRegionCount = unverifiedRegions,
+                UnverifiedBytes = unverifiedBytes,
             };
         }
         catch (OperationCanceledException)
@@ -131,15 +151,19 @@ public static class WipeEngine
         };
     }
 
-    /// <summary>Reads the whole device back and returns the offset of the first non-zero byte, or null.</summary>
-    private static long? FindFirstNonZero(
+    /// <summary>
+    /// Reads the whole device back, returning the offset of the first non-zero byte (or null)
+    /// plus the regions that could not be read at all. Unreadable regions arrive here already
+    /// zero-filled by the reader, so they must be reported separately rather than counted as zeros.
+    /// </summary>
+    private static (long? firstNonZero, int badRegionCount, long badBytes) ScanForNonZero(
         string devicePath, IProgress<DiskProgress>? progress, CancellationToken cancellation)
     {
         using var reader = RawDiskReader.Open(devicePath);
         long? firstNonZero = null;
         long position = 0;
 
-        reader.ReadAll(
+        IReadOnlyList<BadRegion> bad = reader.ReadAll(
             (buffer, count) =>
             {
                 if (firstNonZero is null)
@@ -158,6 +182,9 @@ public static class WipeEngine
             progress,
             cancellation);
 
-        return firstNonZero;
+        long badBytes = 0;
+        foreach (BadRegion r in bad) badBytes += r.Length;
+
+        return (firstNonZero, bad.Count, badBytes);
     }
 }
