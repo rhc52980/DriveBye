@@ -56,3 +56,8 @@ $RECYCLE.BIN/
 *.vhdx
 *.raw
 *.dd
+
+# A copy of the portable build, kept at the repo root for convenience. Not committed: it is
+# 63 MB, git keeps every version forever, and it is reproducible with
+# `dotnet publish Disk_Utility/DiskUtility.csproj -p:PublishProfile=Portable`.
+/DriveBye.exe
