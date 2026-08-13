@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -277,7 +278,11 @@ public partial class MainWindow : Window
         NvmeSanitizeStatus nvme = await Task.Run(() => NvmeSanitize.Query(disk.DeviceId));
         StatusText.Text = "Ready.";
 
-        var options = new List<string> { "Zeros (1 pass)", "Random (1 pass)", "DoD 5220.22-M (3 passes)" };
+        var options = new List<string>
+        {
+            "Zeros (1 pass)", "Random (1 pass)", "DoD 5220.22-M (3 passes)", "Custom pattern (1 pass)",
+        };
+        const int customIndex = 3;
         int secureEraseIndex = -1;
         int sanitizeIndex = -1;
         bool useEnhanced = ata.EnhancedEraseSupported;
@@ -311,13 +316,15 @@ public partial class MainWindow : Window
             + $"\n\n{(nvme.IsNvme ? nvme.Explain() : ata.Explain())}",
             confirmPhrase: $"WIPE {disk.Index}",
             options: options.ToArray(),
-            verifyLabel: "Verify (zeros method only)",
+            verifyLabel: "Verify by reading the drive back",
             // On an SSD the warning above is not enough on its own — make the user state that
             // they've read it, and pass that answer to the engine instead of assuming it.
             acknowledgeText: disk.Media == MediaKind.SSD
                 ? "I understand this is an SSD, and that overwrite passes do not guarantee erasure."
                 : null,
-            verifyOnlyForOptionIndex: 0)   // index of "Zeros (1 pass)"
+            // Verification can only check methods that write something predictable.
+            verifyForOptionIndexes: new[] { 0, customIndex },
+            patternForOptionIndex: customIndex)
         {
             Owner = this,
         };
@@ -339,17 +346,24 @@ public partial class MainWindow : Window
         {
             1 => WipeMethod.Random,
             2 => WipeMethod.DoD5220,
+            customIndex => WipeMethod.Custom,
             _ => WipeMethod.Zeros,
         };
         bool verify = confirm.VerifyChecked;
+        byte[]? pattern = method == WipeMethod.Custom
+            ? Encoding.UTF8.GetBytes(confirm.PatternText)
+            : null;
 
         var (progress, token) = BeginOperation();
         LogLine($"Wiping {disk.DeviceId} ({disk.Model}, {disk.SizeDisplay}) — method: {method}");
+        if (pattern is not null)
+            LogLine($"  Pattern: \"{confirm.PatternText}\" ({pattern.Length} bytes, repeated)");
 
         bool ssdAcknowledged = confirm.Acknowledged;
 
         WipeResult result = await Task.Run(() =>
-            WipeEngine.Wipe(disk, method, allowSsdOverwrite: ssdAcknowledged, verifyZeros: verify, progress, token));
+            WipeEngine.Wipe(disk, method, allowSsdOverwrite: ssdAcknowledged, verify: verify,
+                progress, token, customPattern: pattern));
 
         EndOperation();
 
@@ -361,18 +375,20 @@ public partial class MainWindow : Window
         {
             LogLine($"Done. {result.PassesRun} pass(es) over "
                   + $"{PhysicalDisk.FormatBytes(result.BytesPerPass)} in {result.Elapsed:hh\\:mm\\:ss}.");
-            if (result.VerifiedZero)
-                LogLine("  VERIFY: PASS \u2713  the entire drive reads back as zero.");
-            else if (result.FirstNonZeroOffset is long off)
-                LogLine($"  VERIFY: FAIL \u2717  first non-zero byte at offset {off:N0}.");
+            string wrote = method == WipeMethod.Custom ? "the pattern" : "zero";
+
+            if (result.Verified)
+                LogLine($"  VERIFY: PASS \u2713  the entire drive reads back as {wrote}.");
+            else if (result.FirstMismatchOffset is long off)
+                LogLine($"  VERIFY: FAIL \u2717  first byte that is not {wrote} at offset {off:N0}.");
             else if (result.UnverifiedRegionCount > 0)
-                LogLine($"  VERIFY: INCONCLUSIVE  no non-zero data was found, but "
+                LogLine($"  VERIFY: INCONCLUSIVE  everything read back as {wrote}, but "
                       + $"{result.UnverifiedRegionCount} region(s) "
                       + $"({PhysicalDisk.FormatBytes(result.UnverifiedBytes)}) could not be read "
                       + "back and cannot be confirmed erased.");
             else if (result.VerifyRequested)
-                LogLine($"  VERIFY: SKIPPED  read-back verification only applies to the Zeros "
-                      + $"method; this run used {method}.");
+                LogLine($"  VERIFY: SKIPPED  read-back verification needs a known pattern to "
+                      + $"compare against; this run used {method}.");
         }
     }
 
