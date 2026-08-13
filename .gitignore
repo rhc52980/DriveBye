@@ -61,3 +61,7 @@ $RECYCLE.BIN/
 # 63 MB, git keeps every version forever, and it is reproducible with
 # `dotnet publish Disk_Utility/DiskUtility.csproj -p:PublishProfile=Portable`.
 /DriveBye.exe
+
+# Somewhere to park old build output before deleting it. Nothing in here is needed —
+# every build regenerates its own bin/ and obj/.
+/junk/
