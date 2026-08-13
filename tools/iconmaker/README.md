@@ -1,23 +1,23 @@
 # iconmaker
 
 Regenerates DriveBye's icon assets from the mascot render. Deliberately not part of
-`DiskUtility.sln` — it runs by hand when the artwork changes, not on every build.
+`DriveBye.sln` — it runs by hand when the artwork changes, not on every build.
 
 ## Running it
 
 ```
-dotnet run --project tools/iconmaker -- Disk_Utility/drive_logo2.png out
+dotnet run --project tools/iconmaker -- DriveBye/drive_logo2.png out
 ```
 
 Then copy the results into the app:
 
 | Output | Copy to | Used for |
 | --- | --- | --- |
-| `full.ico` | `Disk_Utility/app.ico` | exe icon, taskbar, title bar |
-| `full-tile.png` | `Disk_Utility/logo.png` | the header image |
+| `full.ico` | `DriveBye/app.ico` | exe icon, taskbar, title bar |
+| `full-tile.png` | `DriveBye/logo.png` | the header image |
 | `full-preview.png` | — | check how it reads at 16–256px before shipping |
 
-Both files are embedded as resources by `DiskUtility.csproj`. The source render is not.
+Both files are embedded as resources by `DriveBye.csproj`. The source render is not.
 
 ## Why two assets for one picture
 
