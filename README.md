@@ -28,7 +28,7 @@ requires a typed confirmation phrase.
 ## Building
 
 ```
-dotnet build DiskUtility.sln
+dotnet build DriveBye.sln
 ```
 
 Needs the .NET 10 SDK. The result is framework-dependent — it runs only where the .NET 10
@@ -37,10 +37,10 @@ Desktop Runtime is installed, and needs the files beside it.
 ## A portable build
 
 ```
-dotnet publish Disk_Utility/DiskUtility.csproj -p:PublishProfile=Portable
+dotnet publish DriveBye/DriveBye.csproj -p:PublishProfile=Portable
 ```
 
-Produces a single self-contained `Disk_Utility/bin/Publish/DriveBye.exe` (~63 MB) that runs on
+Produces a single self-contained `DriveBye/bin/Publish/DriveBye.exe` (~63 MB) that runs on
 any x64 Windows machine with no .NET installed — which is the form you want on a USB stick,
 next to the machine with the broken drive.
 
