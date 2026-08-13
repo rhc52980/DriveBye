@@ -216,6 +216,15 @@ public partial class MainWindow : Window
         if (open.ShowDialog() != true) return;
         string imagePath = open.FileName;
 
+        // The engine refuses containers too — this is only so the refusal arrives before the user
+        // has been made to type the confirm phrase.
+        if (ImageFormat.DetectContainer(imagePath) is string container)
+        {
+            StatusText.Text = $"Not a raw image — {container}.";
+            LogLine($"REFUSED: {ImageFormat.Explain(imagePath, container)}");
+            return;
+        }
+
         var confirm = new ConfirmDialog(
             "Restore image — DESTRUCTIVE",
             $"This will OVERWRITE all data on:\n\n"
