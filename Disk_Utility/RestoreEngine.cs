@@ -37,6 +37,11 @@ public static class RestoreEngine
         {
             DiskSafety.EnsureNotSystemDisk(disk);
 
+            // Refuse containers outright. Nothing can prove a file IS raw, but writing one that
+            // demonstrably is not produces a silently unbootable drive and reports success.
+            if (ImageFormat.DetectContainer(imagePath) is string container)
+                throw new InvalidOperationException(ImageFormat.Explain(imagePath, container));
+
             long imageLength = new FileInfo(imagePath).Length;
             long bytesToWrite;
             bool truncated;
