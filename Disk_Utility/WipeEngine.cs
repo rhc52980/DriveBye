@@ -12,6 +12,7 @@ public enum WipeMethod
     Zeros,      // single pass of 0x00
     Random,     // single pass of random bytes
     DoD5220,    // 3 passes: 0x00, 0xFF, random
+    Custom,     // single pass of a caller-supplied byte pattern, repeated
 }
 
 public sealed class WipeResult
@@ -23,12 +24,16 @@ public sealed class WipeResult
     public TimeSpan Elapsed { get; init; }
     /// <summary>
     /// True when read-back verification was asked for — whether or not it actually ran. It only
-    /// runs for the zeros method, and a request that quietly did nothing must still be reported.
+    /// runs for methods that write a known pattern, and a request that quietly did nothing must
+    /// still be reported.
     /// </summary>
     public bool VerifyRequested { get; init; }
 
-    public bool VerifiedZero { get; init; }
-    public long? FirstNonZeroOffset { get; init; }
+    /// <summary>True only when every byte was read back AND matched what was written.</summary>
+    public bool Verified { get; init; }
+
+    /// <summary>Offset of the first byte that did not match the pattern that was written.</summary>
+    public long? FirstMismatchOffset { get; init; }
 
     /// <summary>
     /// Regions that could not be read back during verification. The reader zero-fills
@@ -47,13 +52,18 @@ public sealed class WipeResult
 /// </summary>
 public static class WipeEngine
 {
+    /// <param name="customPattern">
+    /// Bytes to repeat across the whole drive, for <see cref="WipeMethod.Custom"/>. Ignored by
+    /// every other method, and required by that one.
+    /// </param>
     public static WipeResult Wipe(
         PhysicalDisk disk,
         WipeMethod method,
         bool allowSsdOverwrite,
-        bool verifyZeros,
+        bool verify,
         IProgress<DiskProgress>? progress = null,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default,
+        byte[]? customPattern = null)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -67,11 +77,15 @@ public static class WipeEngine
                     + "(wear-levelling relocates data). Use ATA Secure Erase / NVMe Sanitize instead, "
                     + "or explicitly acknowledge the overwrite.");
 
+            if (method == WipeMethod.Custom && (customPattern is null || customPattern.Length == 0))
+                throw new ArgumentException("A custom wipe needs a pattern to write.", nameof(customPattern));
+
             byte[] passes = method switch
             {
                 WipeMethod.Zeros => new byte[] { 0x00 },
                 WipeMethod.Random => new byte[] { 0xFF }, // marker; random handled below
                 WipeMethod.DoD5220 => new byte[] { 0x00, 0xFF, 0xFF }, // 3rd is random
+                WipeMethod.Custom => new byte[] { 0x00 }, // marker; pattern handled below
                 _ => new byte[] { 0x00 },
             };
 
@@ -88,8 +102,9 @@ public static class WipeEngine
                         (method == WipeMethod.Random) ||
                         (method == WipeMethod.DoD5220 && pass == passes.Length - 1);
 
-                    ChunkProducer producer = isRandom
-                        ? MakeRandomProducer()
+                    ChunkProducer producer =
+                        method == WipeMethod.Custom ? MakePatternProducer(customPattern!)
+                        : isRandom ? MakeRandomProducer()
                         : MakeFillProducer(passes[pass]);
 
                     writer.WriteAll(writer.Length, producer, progress, cancellation);
@@ -97,21 +112,29 @@ public static class WipeEngine
                 }
             }
 
-            // Optional verification only makes sense when the final pass wrote zeros.
+            // Verification needs to know what the drive should now contain, so it only applies to
+            // the methods that write something predictable. Zeros is just a one-byte pattern.
+            byte[]? expected = method switch
+            {
+                WipeMethod.Zeros => new byte[] { 0x00 },
+                WipeMethod.Custom => customPattern,
+                _ => null,
+            };
+
             bool verified = false;
-            long? firstNonZero = null;
+            long? firstMismatch = null;
             int unverifiedRegions = 0;
             long unverifiedBytes = 0;
 
-            if (verifyZeros && method == WipeMethod.Zeros)
+            if (verify && expected is not null)
             {
-                (firstNonZero, unverifiedRegions, unverifiedBytes) =
-                    ScanForNonZero(disk.DeviceId, progress, cancellation);
+                (firstMismatch, unverifiedRegions, unverifiedBytes) =
+                    ScanForPattern(disk.DeviceId, expected, progress, cancellation);
 
                 // A sector we could not read back was zero-filled by the reader, so it looks
-                // exactly like a successfully erased one. Only claim verification when every
-                // byte was actually read AND was zero.
-                verified = firstNonZero is null && unverifiedRegions == 0;
+                // exactly like a successfully written one. Only claim verification when every
+                // byte was actually read AND matched.
+                verified = firstMismatch is null && unverifiedRegions == 0;
             }
 
             stopwatch.Stop();
@@ -121,9 +144,9 @@ public static class WipeEngine
                 PassesRun = passesRun,
                 BytesPerPass = bytesPerPass,
                 Elapsed = stopwatch.Elapsed,
-                VerifyRequested = verifyZeros,
-                VerifiedZero = verified,
-                FirstNonZeroOffset = firstNonZero,
+                VerifyRequested = verify,
+                Verified = verified,
+                FirstMismatchOffset = firstMismatch,
                 UnverifiedRegionCount = unverifiedRegions,
                 UnverifiedBytes = unverifiedBytes,
             };
@@ -150,6 +173,24 @@ public static class WipeEngine
         };
 
     /// <summary>
+    /// Repeats a byte pattern across the drive. The offset is tracked across calls so the pattern
+    /// tiles unbroken over the whole device — otherwise it would restart every 4 MiB chunk and
+    /// a phrase would be chopped up at each boundary.
+    /// </summary>
+    private static ChunkProducer MakePatternProducer(byte[] pattern)
+    {
+        long position = 0;
+        return (buffer, maxCount) =>
+        {
+            for (int i = 0; i < maxCount; i++)
+                buffer[i] = pattern[(int)((position + i) % pattern.Length)];
+
+            position += maxCount;
+            return maxCount;
+        };
+    }
+
+    /// <summary>
     /// Cryptographic RNG, not <see cref="Random"/>: a pass whose bytes are predictable from the
     /// seed undercuts the point of a random overwrite, and of the DoD label on it.
     /// </summary>
@@ -161,27 +202,29 @@ public static class WipeEngine
         };
 
     /// <summary>
-    /// Reads the whole device back, returning the offset of the first non-zero byte (or null)
-    /// plus the regions that could not be read at all. Unreadable regions arrive here already
-    /// zero-filled by the reader, so they must be reported separately rather than counted as zeros.
+    /// Reads the whole device back, returning the offset of the first byte that does not match the
+    /// expected repeating pattern (or null) plus the regions that could not be read at all.
+    /// Unreadable regions arrive here already zero-filled by the reader, so they must be reported
+    /// separately rather than counted as matches.
     /// </summary>
-    private static (long? firstNonZero, int badRegionCount, long badBytes) ScanForNonZero(
-        string devicePath, IProgress<DiskProgress>? progress, CancellationToken cancellation)
+    private static (long? firstMismatch, int badRegionCount, long badBytes) ScanForPattern(
+        string devicePath, byte[] expected, IProgress<DiskProgress>? progress,
+        CancellationToken cancellation)
     {
         using var reader = RawDiskReader.Open(devicePath);
-        long? firstNonZero = null;
+        long? firstMismatch = null;
         long position = 0;
 
         IReadOnlyList<BadRegion> bad = reader.ReadAll(
             (buffer, count) =>
             {
-                if (firstNonZero is null)
+                if (firstMismatch is null)
                 {
                     for (int i = 0; i < count; i++)
                     {
-                        if (buffer[i] != 0)
+                        if (buffer[i] != expected[(int)((position + i) % expected.Length)])
                         {
-                            firstNonZero = position + i;
+                            firstMismatch = position + i;
                             break;
                         }
                     }
@@ -194,6 +237,6 @@ public static class WipeEngine
         long badBytes = 0;
         foreach (BadRegion r in bad) badBytes += r.Length;
 
-        return (firstNonZero, bad.Count, badBytes);
+        return (firstMismatch, bad.Count, badBytes);
     }
 }

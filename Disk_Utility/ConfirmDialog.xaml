@@ -32,6 +32,14 @@
                 <ListBox x:Name="MethodCombo" Style="{StaticResource MethodList}" />
             </StackPanel>
 
+            <StackPanel x:Name="PatternPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                <TextBlock Text="PATTERN" Style="{StaticResource SectionLabel}" Margin="0,0,0,8" />
+                <TextBox x:Name="PatternBox" Style="{StaticResource ModernTextBox}"
+                         TextChanged="PatternBox_TextChanged" />
+                <TextBlock Style="{StaticResource SubtleText}" TextWrapping="Wrap" Margin="2,7,0,0"
+                           Text="Encoded as UTF-8 and repeated unbroken across the whole drive, so it runs on across chunk boundaries rather than restarting." />
+            </StackPanel>
+
             <CheckBox x:Name="VerifyCheck" Style="{StaticResource ModernCheckBox}"
                       Margin="0,0,0,12" Content="Verify after writing" />
 
