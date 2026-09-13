@@ -34,8 +34,9 @@ public partial class MainWindow : Window
         {
             var disks = await Task.Run(() => DriveEnumerator.Enumerate());
             DiskGrid.ItemsSource = disks;
-            StatusText.Text = $"Found {disks.Count} physical drive(s). "
-                            + "Run as Administrator for complete details.";
+            // No "run as administrator" hint: the manifest requires elevation, so it is
+            // advice the reader has already taken by the time they can read it.
+            StatusText.Text = $"Found {disks.Count} physical drive(s).";
         }
         catch (Exception ex)
         {

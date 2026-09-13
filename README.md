@@ -14,6 +14,10 @@ disk.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
+![DriveBye listing two drives, with the system disk flagged and the destructive actions separated from the safe ones](docs/drivebye.png)
+
+<sub>The system disk is marked and refused by every destructive operation.</sub>
+
 ---
 
 ## Why it exists
