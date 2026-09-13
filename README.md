@@ -20,6 +20,36 @@ disk.
 
 ---
 
+## No catch
+
+This is a tool that runs as administrator and erases disks. You should want to
+know exactly what it does before you let it near one, so here is all of it.
+
+**It never touches the network.** No telemetry, no update check, no licence
+check, no analytics, no account. There is no HTTP client, socket or network
+library anywhere in the source — grep for one and you will come up empty. The
+only native libraries it calls into are `kernel32.dll` and `dwmapi.dll`, both
+part of Windows.
+
+**It installs nothing.** No setup program, no service, no scheduled task, no
+kernel driver, no registry keys. Raw disk access uses the APIs Windows already
+provides. Delete the `.exe` and it is gone — which is rather the point, in a
+category where the usual offer is a signed driver of unknown provenance.
+
+**It writes one file: the image you asked for.** That is the only write in the
+codebase. Nothing else is saved anywhere, so there is no history, no cache and
+no settings file holding anything about your drives.
+
+**There is nothing to buy.** No trial, no pro edition, no per-drive or
+per-gigabyte cap, no ads. Every feature listed below is in the download.
+
+**You can check all of it.** MIT licensed, the whole source is in this
+repository, and the `.exe` on the releases page is built from it by the
+[workflow](.github/workflows/release.yml) in this repo, on GitHub's runners.
+
+The download is 63 MB only because the .NET runtime is bundled inside it. That
+is what lets it run on a machine with nothing installed.
+
 ## Why it exists
 
 Overwriting an SSD does not erase it. Wear-levelling moves blocks out from under
