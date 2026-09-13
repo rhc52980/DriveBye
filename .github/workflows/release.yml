@@ -1,0 +1,101 @@
+# Builds DriveBye and attaches the result to the release.
+#
+# Triggered by pushing a version tag:
+#
+#   git tag v1.0.0 ; git push origin v1.0.0
+#
+# The point is that a user should never need the .NET SDK. The published output
+# is self-contained - the runtime is bundled into the single .exe - so
+# downloading it from a release and double-clicking is enough to run DriveBye.
+#
+# Can also be run by hand from the Actions tab (workflow_dispatch) to check the
+# build without cutting a release.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # needed to create the release and upload assets
+
+jobs:
+  build:
+    name: Build win-x64
+    # WPF can only be built on Windows, so this cannot use the Linux runner
+    # the way a console project would.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # The version lives in DriveBye.csproj, not in the tag - the tag is just
+      # how a release gets cut. Read it so the artifact name matches what the
+      # app will actually report at runtime.
+      - name: Read version from DriveBye.csproj
+        id: ver
+        shell: bash
+        run: |
+          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' DriveBye/DriveBye.csproj)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building DriveBye $VERSION"
+
+      # Fail loudly if the tag and the declared version disagree, rather than
+      # publishing a v1.1.0 release containing a binary that says 1.0.0.
+      - name: Check the tag matches the declared version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          if [ "$TAG" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::Tag v$TAG does not match <Version>${{ steps.ver.outputs.version }}</Version> in DriveBye/DriveBye.csproj"
+            exit 1
+          fi
+
+      # Uses the same publish profile as a local build, so CI cannot drift from
+      # what a developer gets by hand.
+      - name: Publish
+        shell: bash
+        run: dotnet publish DriveBye/DriveBye.csproj -p:PublishProfile=Portable
+
+      # A single self-contained .exe is the whole product, but ship the licence
+      # and readme beside it so the download stands on its own.
+      - name: Stage the package
+        id: pack
+        shell: bash
+        run: |
+          NAME="DriveBye-${{ steps.ver.outputs.version }}-win-x64"
+          mkdir -p "stage/$NAME"
+          cp DriveBye/bin/Publish/DriveBye.exe "stage/$NAME/"
+          cp LICENSE README.md "stage/$NAME/"
+          rm -f "stage/$NAME"/*.pdb
+          powershell -Command "Compress-Archive -Path 'stage/$NAME' -DestinationPath '$NAME.zip'"
+          echo "asset=$NAME.zip" >> "$GITHUB_OUTPUT"
+          ls -lh "$NAME.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.asset }}
+          path: ${{ steps.pack.outputs.asset }}
+          retention-days: 14
+
+      # Only on a tag. A manual run builds and uploads to the Actions tab, so
+      # the workflow can be tested without publishing anything.
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Create the release if it doesn't exist yet, so pushing the tag first
+          # and writing notes later both work.
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "DriveBye ${{ steps.ver.outputs.version }}" --generate-notes
+          gh release upload "$TAG" "${{ steps.pack.outputs.asset }}" --clobber

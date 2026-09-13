@@ -1,3 +1,6 @@
+# Editor and agent local config
+.claude/
+
 # Build output
 [Bb]in/
 [Oo]bj/

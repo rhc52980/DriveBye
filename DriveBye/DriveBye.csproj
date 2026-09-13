@@ -11,6 +11,8 @@
     <AssemblyName>DriveBye</AssemblyName>
     <Product>DriveBye</Product>
     <AssemblyTitle>DriveBye</AssemblyTitle>
+    <!-- The release workflow reads this and refuses a tag that disagrees with it. -->
+    <Version>1.0.0</Version>
     <!-- Namespaces stay DiskUtility: renaming them touches every file without changing
          anything a user sees. -->
     <RootNamespace>DiskUtility</RootNamespace>

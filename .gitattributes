@@ -1,0 +1,17 @@
+# Normalise text, but never touch the binaries. The icon, the mascot renders and
+# the generated logo are byte-exact assets — tools/iconmaker documents that a
+# regenerated app.ico should hash identically to the committed one, which only
+# holds if git leaves them alone.
+
+* text=auto
+
+# Read by Windows hosts; keep CRLF.
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Never convert.
+*.png       binary
+*.ico       binary
+*.exe       binary
+*.img       binary
