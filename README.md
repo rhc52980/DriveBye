@@ -31,6 +31,14 @@ library anywhere in the source — grep for one and you will come up empty. The
 only native libraries it calls into are `kernel32.dll` and `dwmapi.dll`, both
 part of Windows.
 
+The one outward link is **Feedback**, in the bottom-right corner beside the
+version. It does nothing until you click it, then asks Windows to open a
+pre-filled GitHub issue in your usual browser. DriveBye makes no request
+itself, and the report carries only the DriveBye version and your Windows
+build, nothing about your disks. It is also the only place the app starts
+another program: `explorer.exe`, so the browser opens unelevated even though
+DriveBye runs as administrator.
+
 **It installs nothing.** No setup program, no service, no scheduled task, no
 kernel driver, no registry keys. Raw disk access uses the APIs Windows already
 provides. Delete the `.exe` and it is gone — which is rather the point, in a
