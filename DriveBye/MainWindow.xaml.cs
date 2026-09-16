@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,9 +16,23 @@ public partial class MainWindow : Window
 {
     private CancellationTokenSource? _cts;
 
+    // The version as the csproj declares it, without the "+commit" suffix the
+    // SDK appends. Read from the entry assembly's attributes rather than from a
+    // file path, which is empty in the single-file build.
+    private static readonly string AppVersion =
+        (Assembly.GetEntryAssembly()?
+             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+             .InformationalVersion
+         ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3)
+         ?? "?")
+        .Split('+')[0];
+
+    private const string NewIssueUrl = "https://github.com/rhc52980/DriveBye/issues/new";
+
     public MainWindow()
     {
         InitializeComponent();
+        VersionRun.Text = "v" + AppVersion;
         SourceInitialized += (_, _) => WindowTheme.ApplyDarkTitleBar(this);
         Loaded += async (_, _) => await LoadDrivesAsync();
     }
@@ -528,5 +544,36 @@ public partial class MainWindow : Window
     {
         LogBox.AppendText($"{DateTime.Now:HH:mm:ss}  {text}{Environment.NewLine}");
         LogBox.ScrollToEnd();
+    }
+
+    // Feedback: open a pre-filled "new issue" page in the user's own browser.
+    // DriveBye makes no request itself, and the report carries only the
+    // DriveBye version and the Windows build - nothing about the disks.
+    //
+    // The address goes to explorer.exe rather than straight to the shell.
+    // DriveBye always runs elevated, and a browser started directly from here
+    // would inherit administrator rights and usually open outside the user's
+    // signed-in session. explorer.exe hands the address to the desktop shell
+    // that is already running unelevated, so the page opens the normal way.
+    private void FeedbackLink_Click(object sender, RoutedEventArgs e)
+    {
+        var body = string.Join("\n",
+            "**What happened?**", "", "",
+            "**What did you expect instead?**", "", "",
+            "**Steps to reproduce**", "", "",
+            "---",
+            $"DriveBye v{AppVersion}",
+            Environment.OSVersion.VersionString);
+        var url = NewIssueUrl + "?body=" + Uri.EscapeDataString(body);
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", "\"" + url + "\"") { UseShellExecute = false });
+        }
+        catch (Exception ex)
+        {
+            // Cosmetic: say so and carry on, as the rest of the app does.
+            StatusText.Text = "Couldn't open the browser: " + ex.Message;
+        }
     }
 }

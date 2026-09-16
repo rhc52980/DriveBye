@@ -188,11 +188,26 @@
             </Grid>
         </Border>
 
-        <!-- Status -->
-        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="2,12,0,0">
-            <Border Width="7" Height="7" CornerRadius="4" Background="{StaticResource Success}"
+        <!-- Status on the left; the version and Feedback in the bottom-right
+             corner. A long status trims rather than pushing the corner off the
+             window, and its full text is on the tooltip. -->
+        <Grid Grid.Row="5" Margin="2,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Width="7" Height="7" CornerRadius="4" Background="{StaticResource Success}"
                     VerticalAlignment="Center" Margin="0,0,9,0" />
-            <TextBlock x:Name="StatusText" Style="{StaticResource SubtleText}" Text="Ready." />
-        </StackPanel>
+            <TextBlock Grid.Column="1" x:Name="StatusText" Style="{StaticResource SubtleText}" Text="Ready."
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+            <TextBlock Grid.Column="2" Style="{StaticResource SubtleText}" Foreground="{StaticResource TextMuted}"
+                       VerticalAlignment="Center" Margin="16,0,0,0">
+                <Run x:Name="VersionRun" /><Run Text="  ·  " /><Hyperlink x:Name="FeedbackLink" Style="{StaticResource FooterLink}"
+                    ToolTip="Report a bug or suggest an idea on GitHub (opens in your browser)"
+                    Click="FeedbackLink_Click">Feedback</Hyperlink>
+            </TextBlock>
+        </Grid>
     </Grid>
 </Window>
